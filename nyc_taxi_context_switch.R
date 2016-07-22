@@ -1,3 +1,4 @@
+
 # set compute context
 devLocal <- FALSE
 
@@ -6,7 +7,7 @@ if (devLocal) {
   inputFile  <- "/home/sshadmin/nyctaxi/000000_0"
   rxSetComputeContext("local")
   hdfsFS <- RxNativeFileSystem()
-  nTree <- 10
+  
 } else {
   filePrefix <- "wasb://nyctaxi@maxkazstorage.blob.core.windows.net"
   inputFile  <- "wasb://nyctaxi@maxkazstorage.blob.core.windows.net/nyc_taxi_joined_tsv"
@@ -17,7 +18,7 @@ if (devLocal) {
                           nameNode= filePrefix)
   rxSetComputeContext(sparkContext)
   hdfsFS <- RxHdfsFileSystem(hostName = filePrefix)
-  nTree <- 1000
+  
 }
 
 xdfOutFile       <- file.path(filePrefix, "nyctaxixdf")
@@ -60,7 +61,9 @@ taxiDSXdf <- rxImport(inData = taxiDS, outFile = xdfOut,
                       createCompositeSet = TRUE,
                       overwrite = TRUE)
 
-rxHistogram(~tipped|payment_type, taxiDSXdf)
+rxHistogram(~tipped|payment_type,  taxiDSXdf)
+rxHistogram(~trip_distance|tipped, taxiDSXdf, startVal = 0.5, endVal = 8)
+rxHistogram(~pickup_hour|tipped, taxiDSXdf, )
 
 #fileInfo <- rxGetInfo(taxiDSXdf, getVarInfo = TRUE, computeInfo=TRUE, getBlockSizes = TRUE)
 #print(fileInfo)
@@ -112,6 +115,57 @@ pt2 <- proc.time()
 runtime <- pt2-pt1; 
 print (runtime/60)
 
+treeView.httpd.handler <- function(path, query, ...) {
+  path <- gsub("^/custom/RevoTreeView/", "", path)
+  f <- sprintf("%s%s%s",
+               tempdir(),
+               .Platform$file.sep,
+               path)
+  list(file=f,
+       "content-type"="text/html",
+       "status code"=200L)
+}
+
+plot.revoTreeView <- function(x, ...) {
+  if(!tools:::httpdPort() > 0L) {
+    tools:::startDynamicHelp()
+  }
+  env <- get( ".httpd.handlers.env", asNamespace("tools"))
+  env[["RevoTreeView"]] <- treeView.httpd.handler
+  root.dir <- paste(tempdir(),x$tempDir,sep="/")
+  
+  #    template <- system.file("revolution", "index.html", package = "RevoTreeView")
+  if ( ! file.exists(paste(root.dir,"assets", sep="/"))) { 
+    tarFile <- system.file("revolution/build","assets.zip",package="RevoTreeView")
+    unzip(tarFile,exdir=root.dir)
+  }
+  if ( ! file.exists(paste(root.dir,"tree.html", sep="/"))) {
+    html.txt <- x$html
+    html.txt <- gsub("\\{\\{DATA\\}\\}",x$json,html.txt)
+    cat(html.txt, file=file.path(root.dir, paste("tree", ".html", sep="")))
+  }
+  file <- file.path(root.dir, paste("tree" ,".html", sep=""))
+  
+  .url <- sprintf("http://127.0.0.1:%s/custom/RevoTreeView/%s/%s",
+                  tools:::httpdPort(),
+                  x$tempDir,
+                  basename(file))
+  browseURL(.url)
+  invisible(file)
+}
+
+# you should be able to just use RevoTreeView::revoTreeView after the fix
+plot.revoTreeView(RevoTreeView::createTreeView(model))
+
+rxVarImpPlot(model)
+
+# check the dependency
+summary(rxLinMod(N(tipped) ~ trip_distance + pickup_hour, data = trainDS))
+rxSummary(tipped ~ fare_amount + vendor_id +
+            pickup_hour + pickup_week + weekday +
+            passenger_count + trip_time_in_secs +
+            trip_distance, data = trainDS)
+
 output <- RxXdfData(file=predictionFile, fileSystem = hdfsFS)
 taxiDxPredict <- rxPredict(model, data = testDS,
                            outData = output, type = "class",
@@ -120,28 +174,6 @@ taxiDxPredict <- rxPredict(model, data = testDS,
 
 # export data - for MLlib script
 rxDataStep(inData = taxiDxPredict, outFile = RxTextData("wasb://nyctaxi@maxkazstorage.blob.core.windows.net/predictSplitcsv", fileSystem = hdfsFS), overwrite = TRUE)
-
-# benchmark the model
-pt1 <- proc.time()
-model <- rxDForest(formula = tipped ~ fare_amount + vendor_id +
-                   pickup_hour + pickup_week + weekday +
-                   passenger_count + trip_time_in_secs +
-                   trip_distance, data = trainDS, 
-                   maxDepth = 10, maxNumBins = 32, nTree = nTree, importance = TRUE, computeOobError = -1,
-                   allowDiskWrite = FALSE)
-pt2 <- proc.time()
-runtime <- pt2-pt1; 
-print (runtime/60)
-rxVarImpPlot(model)
-
-output <- RxXdfData(file=predictionFile, fileSystem = hdfsFS)
-taxiDxPredict <- rxPredict(model, data = testDS,
-                           outData = output, type = "class",
-                           extraVarsToWrite = as.vector(c("tipped")),
-                           overwrite = TRUE)
-
-# export data - for MLlib script
-rxDataStep(inData = taxiDxPredict, outFile = RxTextData("wasb://nyctaxi@maxkazstorage.blob.core.windows.net/predictForestSplitcsv", fileSystem = hdfsFS), overwrite = TRUE)
 
 # compute AUC metric
 #rfDF <- rxImport(inData = taxiDxPredict, outFile = NULL)
@@ -153,5 +185,3 @@ rxDataStep(inData = taxiDxPredict, outFile = RxTextData("wasb://nyctaxi@maxkazst
 
 #rxSetComputeContext("local")
 #rocData <- rxRocCurve(actualVarName = "tipped", predVarNames = "predicted_tipped_prob", data = rfDF)
-
-

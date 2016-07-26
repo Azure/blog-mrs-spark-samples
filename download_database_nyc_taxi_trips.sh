@@ -11,7 +11,7 @@
 #	$ ./download_database_nyc_taxi_trips.sh
 #
 
-DBDIR=nyc_taxi_trips
+DBDIR=nyc_taxi_data
 echo "Downloading NYC Taxi Trips database in ${DBDIR}"
 mkdir ${DBDIR}
 cd ${DBDIR}

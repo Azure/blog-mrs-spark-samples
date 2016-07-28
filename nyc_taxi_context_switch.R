@@ -13,7 +13,7 @@ if (devLocal) {
   inputFile  <- "wasb://nyctaxi@maxkazstorage.blob.core.windows.net/nyc_taxi_joined_tsv"
   sparkContext <- RxSpark(driverMem = "16g",
                           executorCores = 13, executorMem = "15g", numExecutors = 4, executorOverheadMem = "5g",
-                          extraSparkConfig = "--conf spark.memory.fraction=0.9 --conf spark.memory.storageFraction=0.3 --conf yarn.nodemanager.pmem-check-enabled=false --conf yarn.nodemanager.vmem-check-enabled=false",
+                          # extraSparkConfig = "--conf spark.memory.fraction=0.9 --conf spark.memory.storageFraction=0.3 --conf yarn.nodemanager.pmem-check-enabled=false --conf yarn.nodemanager.vmem-check-enabled=false",
                           consoleOutput=TRUE,
                           nameNode= filePrefix)
   rxSetComputeContext(sparkContext)

@@ -160,7 +160,7 @@ plot.revoTreeView(RevoTreeView::createTreeView(model))
 rxVarImpPlot(model)
 
 # check the dependency
-summary(rxLinMod(N(tipped) ~ trip_distance + pickup_hour, data = trainDS))
+# summary(rxLinMod(N(tipped) ~ trip_distance + pickup_hour, data = trainDS))
 rxSummary(tipped ~ fare_amount + vendor_id +
             pickup_hour + pickup_week + weekday +
             passenger_count + trip_time_in_secs +
